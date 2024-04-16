@@ -1,0 +1,19 @@
+kakao:
+  client_id: ${kakao_client_id}
+  redirect_uri: ${kakao_redirect_uri}
+
+spring:
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${url}
+    username: ${username}
+    password: ${password}
+  thymeleaf:
+    check-template-location: false
+  cloud:
+    gcp:
+      storage:
+        credentials:
+          location: ${key_location}
+        project-id: ${gcp_project_id}
+        bucket: ${gcp_bucket}
