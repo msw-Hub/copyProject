@@ -1,14 +1,19 @@
 package io.cloudtype.Demo.service;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import java.time.Year;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class UserInfoService {
 
@@ -143,36 +148,131 @@ public class UserInfoService {
     }
     public String savePetInfo2(String ownerNickname, Map<String, Object> petInfo){
         //petInfo로 받은 petId로 ownerNickname을 찾아서 인자로 받은 ownerNickname과 비교
-        String sql = "SELECT owner_nickname FROM mydb.pet_info WHERE pet_id = ?";
-        String ownerNicknameFromDB = jdbcTemplate.queryForObject(sql, String.class, petInfo.get("petId"));
+        String sql = "SELECT owner_nickname FROM mydb.pet_info WHERE pet_info_id = ?";
+        String ownerNicknameFromDB = jdbcTemplate.queryForObject(sql, String.class, petInfo.get("pet_info_id"));
         //ownerNickname과 ownerNicknameFromDB가 같으면 petInfo를 업데이트
         if(ownerNickname.equals(ownerNicknameFromDB)){
             String updateSql = "UPDATE mydb.pet_info SET weight=?, neutering = ?, animal_hospital=?,vaccination=?,etc=? WHERE pet_info_id = ?";
-            jdbcTemplate.update(updateSql, petInfo.get("petName"), petInfo.get("petAge"), petInfo.get("species"), petInfo.get("petId"));
+            jdbcTemplate.update(updateSql, petInfo.get("weight"), petInfo.get("neutering"),
+                    petInfo.get("animal_hospital"), petInfo.get("vaccination"), petInfo.get("etc"), petInfo.get("pet_info_id"));
             return "success";
         }else {
-            return "해당 petId의 주인이 아닙니다.";
+            return "해당 pet_info_id의 주인이 아닙니다.";
         }
     }
-    public Map<String, Object> petInfoList(String ownerNickname){
-        String sql = "SELECT * FROM mydb.pet_info WHERE owner_nickname = ?";
-        return jdbcTemplate.queryForMap(sql, ownerNickname);
+    public Map<String, Object> petInfoList(String ownerNickname) {
+        try {
+            String sql = "SELECT * FROM mydb.pet_info WHERE owner_nickname = ?";
+            return jdbcTemplate.queryForMap(sql, ownerNickname);
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈 Map 반환
+            return new HashMap<>();
+        }
     }
-    public  Map<String, Object> getPetInfoByPetId(Long petId){
-        String sql = "SELECT * FROM mydb.pet_info WHERE pet_info_id = ?";
-        return jdbcTemplate.queryForMap(sql, petId);
+    public  String getOwnerNicknameByPetId(Long petInfoId){
+        String sql = "SELECT owner_nickname FROM mydb.pet_info WHERE pet_info_id = ?";
+        return jdbcTemplate.queryForObject(sql, String.class, petInfoId);
     }
-    public String getImageUrlByPetId(Long petId){
+    public String getImageUrlByPetId(Long petInfoId){
         String sql = "SELECT pet_profile_image FROM mydb.pet_info WHERE pet_info_id = ?";
-        return jdbcTemplate.queryForObject(sql, String.class, petId);
+        return jdbcTemplate.queryForObject(sql, String.class, petInfoId);
     }
-    public void deletePetInfo(Long petId, String imageUrl){
+    public void deletePetInfo(Long petInfoId, String imageUrl){
         communityBoardService.deleteImageGcs(imageUrl);
         String sql = "DELETE FROM mydb.pet_info WHERE pet_info_id = ?";
-        jdbcTemplate.update(sql, petId);
+        jdbcTemplate.update(sql, petInfoId);
     }
-    public  Map<String, Object> getPetInfoByOwnerNickname(String ownerNickname){
-        String sql = "SELECT pet_info_id, pet_profile_image,pet_name FROM mydb.pet_info WHERE owner_nickname = ?";
-        return jdbcTemplate.queryForMap(sql, ownerNickname);
+    public Map<String, Object> getPetInfoByOwnerNickname(String ownerNickname) {
+        try {
+            String sql = "SELECT pet_info_id, pet_profile_image, pet_name FROM mydb.pet_info WHERE owner_nickname = ?";
+            return jdbcTemplate.queryForMap(sql, ownerNickname);
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈 Map 반환
+            return new HashMap<>();
+        }
+    }
+    //글작성자임을 확인하는 메서드
+    public  boolean checkWriter(Long walkMatchingBoardId, String ownerNickname){
+        //walkMatchingBoardId로 ownerNickname을 찾아서 인자로 받은 ownerNickname과 비교
+        try{
+            String sql = "SELECT writer_nickname FROM mydb.walk_matching_board WHERE walk_matching_board_id = ?";
+            String writerNickname = jdbcTemplate.queryForObject(sql, String.class, walkMatchingBoardId);
+            return ownerNickname.equals(writerNickname);
+        }catch (EmptyResultDataAccessException e){
+            return false;
+        }
+    }
+    //매칭이 되지않은 status=0인 신청글 반환(0~1개뿐임)
+    public List<Map<String, Object>> getWalkPostByNickname2(String writerNickname) {
+        try {
+            String sql = "SELECT * FROM mydb.walk_matching_board WHERE writer_nickname = ? AND status = 2";
+                return jdbcTemplate.queryForList(sql, writerNickname);
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈 리스트반환
+            return new ArrayList<>();
+        }
+    }
+    //매칭상태확인하고 해당글 반환
+    public Map<String, Object> getWalkPostByNickname(String writerNickname, Integer walkPost) {
+        try {
+            //매칭전 글
+            if(walkPost ==0){
+                String sql = "SELECT * FROM mydb.walk_matching_board WHERE writer_nickname = ? AND status = 0";
+                return jdbcTemplate.queryForMap(sql, writerNickname);
+            } else if (walkPost == 1){
+                //매칭완료 후 진행중인 글
+                String sql = "SELECT * FROM mydb.walk_matching_board WHERE writer_nickname = ? AND status = 1";
+                return jdbcTemplate.queryForMap(sql, writerNickname);
+            }else {
+                return new HashMap<>();
+            }
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈
+            return new HashMap<>();
+        }
+    }
+
+    //매칭전 글 반환시, 매칭신청자들도 반환 (작성자 관점에서 리스트반환) >>나중에 돌봄은 인자 받아서 구분
+    public List<Map<String, Object>> getWaitListByNickname(String writerNickname) {
+        try {
+            String sql = "SELECT waiting_list_id, waiter_nickname, rating FROM mydb.waiting_list WHERE writer_nickname = ?";
+            return jdbcTemplate.queryForList(sql, writerNickname);
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈 리스트반환
+            return new ArrayList<>();
+        }
+    }
+    //신청한 사람 닉네임으로 신청한글 정보조회 0~1개뿐임 >>나중에 돌봄은 인자 받아서 구분
+    public Map<String, Object> getWaitListByWaiterNickname(String waiterNickname) {
+        try {
+            //waiterNickname으로 waiting_list테이블에서 글id를 찾아서 walk_matching_board테이블에서 해당글을 찾아옴
+            String sql = "SELECT walk_board_id FROM mydb.waiting_list WHERE waiter_nickname = ?";
+            Long walkBoardId = jdbcTemplate.queryForObject(sql, Long.class, waiterNickname);
+            //해당 id로 글정보 조회, 만일 status가 0이면 매칭전 글, 1이면 매칭완료 후 진행중인 글
+            String sql2 = "SELECT * FROM mydb.walk_matching_board WHERE walk_matching_board_id = ?";
+            return jdbcTemplate.queryForMap(sql2, walkBoardId);
+        } catch (EmptyResultDataAccessException e) {
+            // 검색 결과가 없을 경우 빈 리스트반환
+            return new HashMap<>();
+        }
+    }
+    //petInfoId로 petInfo 테이블에서 해당 행의 정보가 모두 기입되었는지 확인하는 매서드
+    public boolean checkPetInfo(Long petInfoId) {
+        try {
+            String sql = "SELECT * FROM mydb.pet_info WHERE pet_id = ?";
+            Map<String, Object> petInfo = jdbcTemplate.queryForMap(sql, petInfoId);
+
+            // 각 열의 값을 확인하여 null이 없는지 확인
+            for (Map.Entry<String, Object> entry : petInfo.entrySet()) {
+                // etc 열은 확인하지 않음
+                if (!entry.getKey().equals("etc") && entry.getValue() == null) {
+                    log.info("null 값이 있습니다: " + entry.getKey());
+                    return false; // null 값이 하나라도 있으면 false 반환
+                }
+            }
+            return true; // 모든 열에 값이 있으면 true 반환
+        } catch (EmptyResultDataAccessException e) {
+            return false; // 해당하는 행이 없는 경우
+        }
     }
 }

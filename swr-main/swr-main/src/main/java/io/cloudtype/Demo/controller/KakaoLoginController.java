@@ -83,6 +83,8 @@ public class KakaoLoginController {
         jsonResponse.put("access_token_expires_in", expiresAtUnix);
         jsonResponse.put("refresh_token", refreshToken);
         jsonResponse.put("refresh_token_expires_in", refreshTokenExpiresAtUnix);
+        jsonResponse.put("nickname", nickName);
+        jsonResponse.put("email", email);
 
         // ObjectMapper를 사용하여 Map 객체를 JSON 문자열로 변환
         ObjectMapper objectMapper = new ObjectMapper();
