@@ -1,6 +1,11 @@
 kakao:
   client_id: ${kakao_client_id}
   redirect_uri: ${kakao_redirect_uri}
+  cid: ${kakaopay_cid}
+  SECRET_KEY: ${kakaopay_SECRET_KEY}
+
+toss:
+  secret_key: ${toss_secret_key}
 
 spring:
   datasource:
@@ -17,3 +22,17 @@ spring:
           location: ${key_location}
         project-id: ${gcp_project_id}
         bucket: ${gcp_bucket}
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: ${physical-strategy}
+    database-platform: ${database-platform}
+  jwt:
+    accessSecretKey: ${accessSecretKey}
+    refreshSecretKey: ${refreshSecretKey}

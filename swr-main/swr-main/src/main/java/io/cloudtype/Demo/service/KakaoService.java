@@ -2,16 +2,15 @@ package io.cloudtype.Demo.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.cloudtype.Demo.entity.UserEntity;
+import io.cloudtype.Demo.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
@@ -19,16 +18,14 @@ import java.util.Map;
 
 @Slf4j
 @Service
-@SuppressWarnings("unchecked")
 public class KakaoService {
-    private final JdbcTemplate jdbcTemplate;
-    private final UserInfoService userInfoService;
+
 
     // 생성자를 통한 주입
-    @Autowired
-    public KakaoService(JdbcTemplate jdbcTemplate, UserInfoService userInfoService) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.userInfoService = userInfoService;
+    private final UserRepository userRepository;
+
+    public KakaoService(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
 
@@ -87,7 +84,6 @@ public class KakaoService {
 
         // 프로필 정보 가져오기
         Map<String, Object> properties = (Map<String, Object>) jsonMap.get("properties");
-        String nickname = (String) properties.get("nickname");
         String profileImage = (String) properties.get("profile_image");
 
         // 카카오 계정 정보 추출
@@ -96,83 +92,41 @@ public class KakaoService {
         Map<String, Object> profile = (Map<String, Object>) kakaoAccount.get("profile");
         String name = (String) profile.get("nickname");
         String gender = (String) kakaoAccount.get("gender");
-        String ageRange = (String) kakaoAccount.get("age_range");
-        Long userId = (Long) jsonMap.get("id");
 
         // userInfo에 넣기
-        userInfo.put("userId", userId);
-        userInfo.put("nickname", nickname);
         userInfo.put("profileImage", profileImage);
         userInfo.put("email", email);
         userInfo.put("name", name);
         userInfo.put("gender", gender);
-        userInfo.put("ageRange", ageRange);
 
         return userInfo;
     }
 
     //사용자 정보 처리 메서드 (DB에 이미 존재하는지 확인후 있으면 로그인, 없으면 회원가입 진행)
-    public int processUser(@NotNull Map<String, Object> userInfo) {
-        Long userId = (Long) userInfo.get("userId");
-
-        // 사용자 ID가 데이터베이스에 이미 존재하는지 확인
-        String sql = "SELECT COUNT(*) FROM mydb.user_info WHERE user_id = ?";
-        int count = jdbcTemplate.queryForObject(sql, Integer.class, userId);
-
-        if (count == 0) {
-            // 사용자 정보가 데이터베이스에 존재하지 않는 경우, 사용자 정보를 저장
-            userInfoService.saveUserInfo(userInfo);
-        }
-
-        return count;
+    public int processUser(String email) {
+        return isUsernameTaken(email);
     }
+    @Transactional(readOnly = true)
+    public int isUsernameTaken(String username) {
+        UserEntity user = userRepository.findByUsername(username);
 
-    //리프레시 토큰으로 엑세스 토큰 갱신하는 메서드
-    public Map<String, String> refreshAccessToken(String client_id, String refresh_token) throws IOException {
-        // 토큰 갱신 요청을 보낼 URL
-        String reqURL = "https://kauth.kakao.com/oauth/token";
-
-        // 토큰 갱신 요청에 필요한 파라미터 설정
-        String params = "grant_type=refresh_token" +
-                "&client_id=" + client_id +
-                "&refresh_token=" + refresh_token;
-
-        // URL 객체 생성
-        URL url = new URL(reqURL);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-
-        // HTTP 요청 메서드 설정
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-        // 출력 스트림을 사용하여 파라미터 전송
-        conn.setDoOutput(true);
-        OutputStream os = conn.getOutputStream();
-        os.write(params.getBytes());
-        os.flush();
-        os.close();
-
-        // 응답코드 확인
-        int responseCode = conn.getResponseCode();
-        System.out.println("Response Code : " + responseCode);
-
-        // 응답을 읽어올 BufferedReader 생성
-        BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-        StringBuilder response = new StringBuilder();
-        String line;
-
-        // 응답 내용을 문자열로 읽어옴
-        while ((line = br.readLine()) != null) {
-            response.append(line);
+        if (user == null) {
+            return 0; // 사용 가능한 username
+        } else {
+            return user.isKakaoLogin() ? 1 : 2; // 카카오 로그인 여부에 따라 반환값 설정
         }
-        br.close();
-
-        // 응답 내용을 JSON 형식으로 파싱하여 Map으로 반환
-        ObjectMapper objectMapper = new ObjectMapper();
-        Map<String, String> tokens = objectMapper.readValue(response.toString(), new TypeReference<Map<String, String>>() {});
-
-        return tokens;
     }
+    public void signUp(String email, String role, String profile, String name, String gender, String jwtRefreshToken) {
+        UserEntity user = new UserEntity();
+        user.setUsername(email);
+        user.setRole(role);
+        user.setProfileImage(profile);
+        user.setName(name);
+        user.setGender(gender);
+        user.setRefreshToken(jwtRefreshToken);
+        user.setKakaoLogin(true);
+        user.setPartnership(0);
 
-
+        userRepository.save(user);
+    }
 }

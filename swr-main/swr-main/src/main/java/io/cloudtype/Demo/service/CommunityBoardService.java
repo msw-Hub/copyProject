@@ -1,16 +1,29 @@
 package io.cloudtype.Demo.service;
 
-
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import io.cloudtype.Demo.Dto.Community.CommentDTO;
+import io.cloudtype.Demo.Dto.Community.CommunityBoardDTO;
+import io.cloudtype.Demo.entity.Community.CommentEntity;
+import io.cloudtype.Demo.entity.Community.CommunityBoardEntity;
+import io.cloudtype.Demo.entity.Community.LikeEntity;
+import io.cloudtype.Demo.entity.UserEntity;
+import io.cloudtype.Demo.jwt.JWTUtil;
+import io.cloudtype.Demo.repository.Community.CommentRepository;
+import io.cloudtype.Demo.repository.Community.CommunityBoardRepository;
+import io.cloudtype.Demo.repository.Community.LikeRepository;
+import io.cloudtype.Demo.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,9 +31,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -28,57 +40,32 @@ import java.util.stream.Collectors;
 @Service
 public class CommunityBoardService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final UserRepository userRepository;
+    private final CommunityBoardRepository communityBoardRepository;
+    private final LikeRepository likeRepository;
+    private final JWTUtil jwtUtil;
+    private final CommentRepository commentRepository;
+
     @Value("${spring.cloud.gcp.storage.credentials.location}")
     private final String keyFileName;
-
-    @Value("${spring.cloud.gcp.storage.project-id}")
-    private final String projectId;
 
     @Value("${spring.cloud.gcp.storage.bucket}")
     private final String bucketName;
 
-    @Autowired
     public CommunityBoardService(@Value("${spring.cloud.gcp.storage.credentials.location}") String keyFileName,
                                  @Value("${spring.cloud.gcp.storage.bucket}") String bucketName,
-                                 @Value("${spring.cloud.gcp.storage.project-id}") String projectId,
-                                 JdbcTemplate jdbcTemplate) {
+                                 UserRepository userRepository, JWTUtil jwtUtil, CommunityBoardRepository communityBoardRepository,
+                                 CommentRepository commentRepository,
+                                 LikeRepository likeRepository) {
         this.keyFileName = keyFileName;
         this.bucketName = bucketName;
-        this.projectId = projectId;
-        this.jdbcTemplate = jdbcTemplate;
+        this.userRepository = userRepository;
+        this.jwtUtil = jwtUtil;
+        this.communityBoardRepository = communityBoardRepository;
+        this.commentRepository = commentRepository;
+        this.likeRepository = likeRepository;
     }
 
-
-    public Map<String, Object> getCommunityBoardPosts(int page) {
-        // 한 페이지에 표시할 게시글 수
-        int pageSize = 10;
-        // 페이지 번호에 따라 시작 게시글의 인덱스 계산
-        int start = (page - 1) * pageSize;
-        // SQL 쿼리 생성
-        String sql = "SELECT * FROM community_board ORDER BY created_date DESC LIMIT ?, ?";
-        // SQL 쿼리 실행
-        try {
-            List<Map<String, Object>> lists = jdbcTemplate.queryForList(sql, start, pageSize);
-
-            // 결과 맵 생성
-            Map<String, Object> result = new HashMap<>();
-            result.put("posts", lists);
-            result.put("page", page);
-            result.put("pageSize", pageSize);
-
-            return result;
-        } catch (Exception e) {
-            log.error("Failed to fetch community board posts", e);
-            return null;
-        }
-    }
-    public void writePost(String nickname, String title, String content, String imgUrl){
-        // 게시글 작성 SQL 쿼리 실행
-        String sql = "INSERT INTO community_board (writer_nickname, title, content, created_date, img_url) " +
-                "VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)";
-        jdbcTemplate.update(sql,nickname, title, content, imgUrl);
-    }
     public String uploadImage(MultipartFile image) {
         try {
             // 이미지가 비어 있는지 확인
@@ -112,44 +99,11 @@ public class CommunityBoardService {
             return null;
         }
     }
-    public List<Map<String, Object>> getCommentsForPost(Long postId) {
-        String sql = "SELECT * FROM community_reply WHERE community_board_id = ?";
-        return jdbcTemplate.queryForList(sql, postId);
+    public String findImageUrlById(int communityBoardId) {
+        return communityBoardRepository.findImageUrlById(communityBoardId);
     }
-    public void deleteCommunityBoard(Long communityBoardId) {
-        // 게시글 id를 토대로 이미지 URL을 가져옴
-        String sql = "SELECT img_url FROM community_board WHERE community_board_id = ?";
-        String imgUrl = jdbcTemplate.queryForObject(sql, String.class, communityBoardId);
-        if (imgUrl != null && !imgUrl.isEmpty()) {
-            deleteImageGcs(imgUrl);
-        }
 
-        // 게시글에 연결된 모든 댓글 ID 찾기
-        String findRepliesSql = "SELECT community_reply_id FROM community_reply WHERE community_board_id = ?";
-        List<Long> replyIds = jdbcTemplate.queryForList(findRepliesSql, new Object[]{communityBoardId}, Long.class);
-
-        if (!replyIds.isEmpty()) {
-            // 모든 댓글 ID를 쉼표로 구분된 문자열로 변환
-            String replyIdsStr = replyIds.stream().map(Object::toString).collect(Collectors.joining(","));
-
-            // 모든 댓글에 연결된 좋아요 삭제
-            String deleteLikesSql = "DELETE FROM likes WHERE likes_reply_id IN (" + replyIdsStr + ")";
-            jdbcTemplate.update(deleteLikesSql);
-
-            // 모든 댓글 삭제
-            String deleteRepliesSql = "DELETE FROM community_reply WHERE community_reply_id IN (" + replyIdsStr + ")";
-            jdbcTemplate.update(deleteRepliesSql);
-        }
-
-        // 게시글에 연결된 좋아요 삭제
-        String deleteLikesSql2 = "DELETE FROM likes WHERE likes_board_id = ?";
-        jdbcTemplate.update(deleteLikesSql2, communityBoardId);
-
-        // 게시글 삭제
-        String deleteSql = "DELETE FROM community_board WHERE community_board_id = ?";
-        jdbcTemplate.update(deleteSql, communityBoardId);
-    }
-    public void deleteImageGcs(String imgUrl){
+    public void deleteImageGcs(String imgUrl) {
         // imgUrl에서 파일 이름(객체 이름)을 추출
         String objectName = imgUrl.substring(imgUrl.lastIndexOf('/') + 1);
         log.info("Object name: {}", objectName);
@@ -172,101 +126,257 @@ public class CommunityBoardService {
             log.error("Error occurred while accessing GCP credentials: {}", e.getMessage());
         }
     }
-    public void deleteReply(Long communityReplyId) {
-        //댓글과 관련된 좋아요 먼저 삭제
-        String likesSql = "DELETE FROM likes WHERE likes_reply_id = ?";
-        jdbcTemplate.update(likesSql, communityReplyId);
-        //댓글로 해당 게시글 id를 찾아둠
-        String sql2 = "SELECT community_board_id FROM community_reply WHERE community_reply_id = ?";
-        Long communityBoardId = jdbcTemplate.queryForObject(sql2, Long.class, communityReplyId);
-        //댓글 삭제
-        String sql = "DELETE FROM community_reply WHERE community_reply_id = ?";
-        jdbcTemplate.update(sql, communityReplyId);
-        //댓글을 삭제했으니, 해당 게시글의 댓글수를 감소시킴
-        String sql3 = "UPDATE community_board SET replies = replies - 1 WHERE community_board_id = ?";
-        jdbcTemplate.update(sql3, communityBoardId);
+
+    @Transactional
+    public void writePost(String accessToken, String title, String content, String imgUrl) {
+        // 액세스 토큰에서 'Bearer ' 접두사를 제거하고 사용자 이름을 추출
+        accessToken = accessToken.split(" ")[1];
+        String username = jwtUtil.getUsername(accessToken, 1);
+
+        // username을 이용해 UserEntity를 조회
+        UserEntity user = userRepository.findByUsername(username);
+
+        // 새로운 CommunityBoardEntity 인스턴스 생성 및 세부 정보 설정
+        CommunityBoardEntity post = new CommunityBoardEntity();
+        post.setTitle(title);
+        post.setContent(content);
+        post.setImgUrl(imgUrl);
+
+        // CommunityBoardEntity에 UserEntity를 연결
+        post.setUser(user);  // UserEntity 객체를 직접 연결
+
+        // Repository를 사용해 CommunityBoardEntity를 저장
+        communityBoardRepository.save(post);
     }
-    public void editCommunityBoard(Long communityBoardId,  String title, String content, MultipartFile image, Boolean imageChangeCheck) {
-        String sql = "SELECT img_url FROM community_board WHERE community_board_id = ?";
-        String imgUrl = jdbcTemplate.queryForObject(sql, String.class, communityBoardId);
-        if( imageChangeCheck && image==null ){  //게시글의 이미지 삭제
-            if(imgUrl == null) log.error("Failed to fetch image URL from community board post"); //기존 url이 없었는데 삭제한다니 오류
-            else deleteImageGcs(imgUrl);
-            String updateSql = "UPDATE community_board SET title = ?, content = ?, img_url = ? WHERE community_board_id = ?";
-            jdbcTemplate.update(updateSql, title, content, null, communityBoardId);
-        } else if (imageChangeCheck) {  //게시글의 이미지 변경 (1.gcs이미지 삭제 후 변경이미지 업로드)
-            if(imgUrl != null) deleteImageGcs(imgUrl);
-            String newImgUrl = uploadImage(image);
-            String updateSql = "UPDATE community_board SET title = ?, content = ?, img_url = ? WHERE community_board_id = ?";
-            jdbcTemplate.update(updateSql, title, content, newImgUrl, communityBoardId);
-        } else {   //게시글의 이미지 변경 없이 수정
-            String updateSql = "UPDATE community_board SET title = ?, content = ? WHERE community_board_id = ?";
-            jdbcTemplate.update(updateSql, title, content, communityBoardId);
+
+    public List<CommunityBoardDTO> getCommunityBoardPosts(int pageNumber) {
+        Pageable pageable = PageRequest.of(pageNumber, 10, Sort.by("createDate").descending());
+        Page<CommunityBoardEntity> page = communityBoardRepository.findAllByOrderByCreateDateDesc(pageable);
+
+        // 엔티티 객체를 DTO로 변환하여 반환
+        return page.getContent().stream()
+                .map(this::mapToDTO)
+                .collect(Collectors.toList());
+    }
+
+    private CommunityBoardDTO mapToDTO(CommunityBoardEntity entity) {
+        CommunityBoardDTO dto = new CommunityBoardDTO();
+        dto.setId(entity.getId());
+        dto.setNickname(entity.getUser().getNickname());
+        dto.setTitle(entity.getTitle());
+        dto.setContent(entity.getContent());
+        dto.setCreateDate(entity.getCreateDate());
+        dto.setImgUrl(entity.getImgUrl());
+        dto.setLikeCount(entity.getLikeCount());
+        dto.setCommentCount(entity.getCommentCount());
+        dto.setViewCount(entity.getViewCount());
+        return dto;
+    }
+    public List<CommunityBoardDTO> getPost(int communityBoardId) {
+        // 게시글 ID를 사용하여 해당 게시글을 찾습니다.
+        Optional<CommunityBoardEntity> postOptional = Optional.ofNullable(communityBoardRepository.findById(communityBoardId));
+        // 옵셔널에서 게시글을 가져오거나 게시글이 없는 경우 예외를 던집니다.
+        CommunityBoardEntity post = postOptional.orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다. ID: " + communityBoardId));
+        // 조회수 증가
+        post.setViewCount(post.getViewCount() + 1);
+        communityBoardRepository.save(post);
+        // 게시글을 DTO로 변환하여 반환
+        return List.of(mapToDTO(post));
+    }
+    public List<CommentDTO> getComments(int communityBoardId) {
+        List<CommentEntity> comments = commentRepository.findAllByCommunityBoard_Id(communityBoardId);
+        return comments.stream()
+                .map(this::mapToDTO2)
+                .collect(Collectors.toList());
+    }
+    private CommentDTO mapToDTO2(CommentEntity entity) {
+        CommentDTO dto = new CommentDTO();
+        dto.setId(entity.getId());
+        dto.setNickname(entity.getUser().getNickname());
+        dto.setContent(entity.getContent());
+        dto.setCreateDate(entity.getCreateDate());
+        dto.setLikeCount(entity.getLikeCount());
+        return dto;
+    }
+
+    @Transactional
+    public void writeComment(String accessToken, int communityBoardId, String content) {
+        accessToken = accessToken.split(" ")[1]; // Remove Bearer prefix
+        String username = jwtUtil.getUsername(accessToken, 1); // Extract username from token
+        UserEntity user = userRepository.findByUsername(username);  //댓글 작성자
+
+        Optional<CommunityBoardEntity> board = Optional.ofNullable(communityBoardRepository.findById(communityBoardId));
+        // 옵셔널에서 게시글을 가져오거나 게시글이 없는 경우 예외를 던집니다.
+        CommunityBoardEntity post = board.orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다 ID: " +communityBoardId));
+
+        // 게시글의 댓글 수 증가
+        post.setCommentCount(post.getCommentCount() + 1);
+        communityBoardRepository.save(post);
+
+        //댓글 저장
+        CommentEntity comment = new CommentEntity();
+        comment.setUser(user);
+        comment.setCommunityBoard(post);
+        comment.setContent(content);
+        commentRepository.save(comment);
+    }
+
+    @Transactional
+    public void removeComment(String accessToken, int commentId) {
+        accessToken = accessToken.split(" ")[1];
+        String username = jwtUtil.getUsername(accessToken, 1);
+        UserEntity user = userRepository.findByUsername(username);  //댓글 작성자
+        // 댓글 ID를 사용하여 해당 댓글을 찾습니다.
+        Optional<CommentEntity> commentOptional = Optional.ofNullable(commentRepository.findById(commentId));
+        // 옵셔널에서 댓글을 가져오거나 댓글이 없는 경우 예외
+        CommentEntity comment = commentOptional.orElseThrow(() -> new IllegalArgumentException("댓글을 찾을 수 없습니다 ID: " + commentId));
+        // 자신만이 삭제가능
+        if (comment.getUser().getId() != user.getId()) {
+            throw new IllegalStateException("본인 댓글만 삭제할 수 있습니다");
         }
+        // 댓글 삭제하기 전에 좋아요를 누른 사용자들을 목록에서 삭제
+        likeRepository.deleteByComment_Id(commentId);
+        // 게시글의 댓글 수 감소
+        CommunityBoardEntity post = comment.getCommunityBoard();
+        post.setCommentCount(post.getCommentCount() - 1);
+        communityBoardRepository.save(post);
+        // 댓글 삭제
+        commentRepository.delete(comment);
     }
-    public void writeReply(Long communityBoardId, String nickname, String content) {
-        String sql = "INSERT INTO community_reply (community_board_id,reply_content,reply_date,writer_nickname) " +
-                "VALUES (?, ?, CURRENT_TIMESTAMP, ?)";
-        jdbcTemplate.update(sql, communityBoardId,content, nickname);
-        //해당글의 댓글수 증가
-        String sql2 = "UPDATE community_board SET replies = replies + 1 WHERE community_board_id = ?";
-        jdbcTemplate.update(sql2, communityBoardId);
-    }
-    public void plusViews(Long communityBoardId) {
-        String sql = "UPDATE community_board SET views = views + 1 WHERE community_board_id = ?";
-        jdbcTemplate.update(sql, communityBoardId);
-    }
-    public String plusBoardLikes(Long communityBoardId, String nickname) {
-        //좋아요를 이미 누르면 안되도록 중복체크
-        String sql = "SELECT likes_nickname FROM likes WHERE likes_board_id = ?";
-        List<String> nicknames = jdbcTemplate.queryForList(sql, String.class, communityBoardId);
-
-        if (!nicknames.contains(nickname)) {
-            //communityBoardId로 community_board 테이블에서 community_board_id가 존재하는지를 확인하고 진행
-            String sql3 = "SELECT community_board_id FROM community_board WHERE community_board_id = ?";
-            Long communityBoardId2 = jdbcTemplate.queryForObject(sql3, Long.class, communityBoardId);
-            if(communityBoardId2 == null) {
-                log.error("유효한 community_board_id가 아닙니다.");
-                return "유효한 community_board_id가 아닙니다.";
-            }
-            else {
-                String sql2 = "INSERT INTO mydb.likes (likes_nickname, likes_board_id)" + "VALUES (?, ?)";
-                jdbcTemplate.update(sql2, nickname, communityBoardId);
-
-                String updateSql = "UPDATE community_board SET likes = likes + 1 WHERE community_board_id = ?";
-                jdbcTemplate.update(updateSql, communityBoardId);
-                return "success";
-            }
-        }else return "이미 좋아요를 눌렀습니다";
-    }
-    public String plusReplyLikes(Long communityReplyId, String nickname) {
-        //좋아요를 이미 누르면 안되도록 중복체크
-        String sql = "SELECT likes_nickname FROM likes WHERE likes_reply_id = ?";
-        List<String> nicknames = jdbcTemplate.queryForList(sql, String.class, communityReplyId);
-
-        if (!nicknames.contains(nickname)) {
-            //communityReplyId로 community_reply 테이블에서 community_reply_id가 존재하는지를 확인하고 진행
-            String sql3 = "SELECT community_reply_id FROM community_reply WHERE community_reply_id = ?";
-            Long communityReplyId2 = jdbcTemplate.queryForObject(sql3, Long.class, communityReplyId);
-            if(communityReplyId2 == null) {
-                log.error("유효한 community_reply_id가 아닙니다.");
-                return "유효한 community_reply_id가 아닙니다.";
-            }
-            else {
-                String sql2 = "INSERT INTO mydb.likes (likes_nickname, likes_reply_id)" + "VALUES (?, ?)";
-                jdbcTemplate.update(sql2, nickname, communityReplyId);
-                String updateSql = "UPDATE community_reply SET likes = likes + 1 WHERE community_reply_id = ?";
-                jdbcTemplate.update(updateSql, communityReplyId);
-                return "success";
-            }
-        }else {
-            return "이미 좋아요를 눌렀습니다";
+    @Transactional
+    public void removePost(String accessToken, int postId) {
+        accessToken = accessToken.split(" ")[1]; // Remove Bearer prefix
+        // 토큰에서 사용자 이름 추출
+        String username = jwtUtil.getUsername(accessToken, 1);
+        // 사용자 이름으로 UserEntity 조회
+        UserEntity user = userRepository.findByUsername(username);
+        // 게시글 ID를 사용하여 해당 게시글을 찾습니다.
+        Optional<CommunityBoardEntity> postOptional = Optional.ofNullable(communityBoardRepository.findById(postId));
+        // 옵셔널에서 게시글을 가져오거나 게시글이 없는 경우 예외를 던집니다.
+        CommunityBoardEntity post = postOptional.orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다 ID: " + postId));
+        // 자신만이 삭제가능
+        if (post.getUser().getId() != user.getId()) {
+            throw new IllegalStateException("본인 게시글만 삭제할 수 있습니다");
         }
+        // 게시글 삭제하기 전에 해당 게시글의 좋아요를 누른 사용자들을 목록에서 삭제
+        likeRepository.deleteByCommunityBoard_Id(postId);
+        // 게시글에 있는 모든 댓글 삭제
+        List<CommentEntity> comments = commentRepository.findByCommunityBoard_Id(postId);
+        comments.forEach(comment -> removeCommentForPost(comment.getId()));
+        // 게시글 삭제
+        communityBoardRepository.delete(post);
     }
-    public void deleteReplyBeforeCheck(Long communityReplyId, String nickname) {
-        String sql = "SELECT writer_nickname FROM mydb.community_reply WHERE community_reply_id = ?";
-        String writerNickname =  jdbcTemplate.queryForObject(sql, String.class, communityReplyId);
-        if(nickname.equals(writerNickname)) deleteReply(communityReplyId);
-        else log.error("You are not the writer of this reply.");
+    public void removeCommentForPost(int commentId) {
+        // 댓글 ID를 사용하여 해당 댓글을 찾습니다.
+        Optional<CommentEntity> commentOptional = Optional.ofNullable(commentRepository.findById(commentId));
+        // 옵셔널에서 댓글을 가져오거나 댓글이 없는 경우 예외
+        CommentEntity comment = commentOptional.orElseThrow(() -> new IllegalArgumentException("댓글을 찾을 수 없습니다 ID: " + commentId));
+        // 댓글 삭제하기 전에 좋아요를 누른 사용자들을 목록에서 삭제
+        likeRepository.deleteByComment_Id(commentId);
+        // 게시글의 댓글 수 감소
+        CommunityBoardEntity post = comment.getCommunityBoard();
+        post.setCommentCount(post.getCommentCount() - 1);
+        communityBoardRepository.save(post);
+        // 댓글 삭제
+        commentRepository.delete(comment);
+    }
+
+    @Transactional
+    public void likePost(String accessToken, int postId) {
+        accessToken = accessToken.split(" ")[1]; // Remove Bearer prefix
+        // 토큰에서 사용자 이름 추출
+        String username = jwtUtil.getUsername(accessToken, 1);
+        // 사용자 이름으로 UserEntity 조회
+        UserEntity user = userRepository.findByUsername(username);
+        // 게시글 ID를 사용하여 해당 게시글을 찾습니다.
+        Optional<CommunityBoardEntity> postOptional = Optional.ofNullable(communityBoardRepository.findById(postId));
+        // 옵셔널에서 게시글을 가져오거나 게시글이 없는 경우 예외를 던집니다.
+        CommunityBoardEntity post = postOptional.orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다 ID: " + postId));
+        // 자추 안됌
+        if (post.getUser().getId() == user.getId()) {
+            throw new IllegalStateException("본인 게시글에는 좋아요를 누를 수 없습니다");
+        }
+        // 좋아요를 누른 사용자 목록에 사용자가 이미 있는지 확인, user.getId()와 post.getId()를 이용하여 LikeEntity를 조회
+        boolean liked = likeRepository.existsByUser_IdAndCommunityBoard_Id(user.getId(), post.getId());
+        if (liked) {
+            throw new IllegalStateException("이미 좋아요를 누른 게시글입니다");
+        }
+        // 좋아요를 누른 사용자 목록에 사용자 추가
+        LikeEntity like = new LikeEntity();
+        like.setUser(user);
+        like.setCommunityBoard(post);
+        likeRepository.save(like);
+        // 게시글의 좋아요 수 증가
+        post.setLikeCount(post.getLikeCount() + 1);
+        communityBoardRepository.save(post);
+    }
+    @Transactional
+    public void likeComment(String accessToken, int commentId){
+        accessToken = accessToken.split(" ")[1]; // Remove Bearer prefix
+        // 토큰에서 사용자 이름 추출
+        String username = jwtUtil.getUsername(accessToken, 1);
+        // 사용자 이름으로 UserEntity 조회
+        UserEntity user = userRepository.findByUsername(username);
+        // 댓글 ID를 사용하여 해당 댓글을 찾습니다.
+        Optional<CommentEntity> commentOptional = Optional.ofNullable(commentRepository.findById(commentId));
+        // 옵셔널에서 댓글을 가져오거나 댓글이 없는 경우 예외
+        CommentEntity comment = commentOptional.orElseThrow(() -> new IllegalArgumentException("댓글을 찾을 수 없습니다 ID: " + commentId));
+        // 자신의 댓글에는 좋아요를 누를 수 없음
+        if (comment.getUser().getId() == user.getId()) {
+            throw new IllegalStateException("본인 댓글에는 좋아요를 누를 수 없습니다");
+        }
+        // 좋아요를 누른 사용자 목록에 사용자가 이미 있는지 확인
+        boolean liked = likeRepository.existsByUser_IdAndComment_Id(user.getId(), comment.getId());
+        if (liked) {
+            throw new IllegalStateException("이미 좋아요를 누른 댓글입니다");
+        }
+        // 좋아요를 누른 사용자 목록에 사용자 추가
+        LikeEntity like = new LikeEntity();
+        like.setUser(user);
+        like.setComment(comment);
+        likeRepository.save(like);
+        //댓글의 좋아요 수 증가
+        comment.setLikeCount(comment.getLikeCount() + 1);
+        commentRepository.save(comment);
+    }
+    @Transactional
+    public void editPost(String accessToken, int postId, String title, String content, String imgUrl) {
+        accessToken = accessToken.split(" ")[1];
+        // 토큰에서 사용자 이름 추출
+        String username = jwtUtil.getUsername(accessToken, 1);
+        // 사용자 이름으로 UserEntity 조회
+        UserEntity user = userRepository.findByUsername(username);
+        // 게시글 ID를 사용하여 해당 게시글을 찾습니다.
+        Optional<CommunityBoardEntity> postOptional = Optional.ofNullable(communityBoardRepository.findById(postId));
+        // 옵셔널에서 게시글을 가져오거나 게시글이 없는 경우 예외를 던집니다.
+        CommunityBoardEntity post = postOptional.orElseThrow(() -> new IllegalArgumentException("게시글을 찾을 수 없습니다 ID: " + postId));
+        // 자신만이 수정가능
+        if (post.getUser().getId() != user.getId()) {
+            throw new IllegalStateException("본인 게시글만 수정할 수 있습니다");
+        }
+        // 게시글 수정
+        post.setTitle(title);
+        post.setContent(content);
+        post.setImgUrl(imgUrl);
+        communityBoardRepository.save(post);
+    }
+    @Transactional
+    public void editComment(String accessToken, int commentId, String content) {
+        accessToken = accessToken.split(" ")[1];
+        // 토큰에서 사용자 이름 추출
+        String username = jwtUtil.getUsername(accessToken, 1);
+        // 사용자 이름으로 UserEntity 조회
+        UserEntity user = userRepository.findByUsername(username);
+        // 댓글 ID를 사용하여 해당 댓글을 찾습니다.
+        Optional<CommentEntity> commentOptional = Optional.ofNullable(commentRepository.findById(commentId));
+        // 옵셔널에서 댓글을 가져오거나 댓글이 없는 경우 예외
+        CommentEntity comment = commentOptional.orElseThrow(() -> new IllegalArgumentException("댓글을 찾을 수 없습니다 ID: " + commentId));
+        // 자신만이 수정가능
+        if (comment.getUser().getId() != user.getId()) {
+            throw new IllegalStateException("본인 댓글만 수정할 수 있습니다");
+        }
+        // 댓글 수정
+        comment.setContent(content);
+        commentRepository.save(comment);
     }
 }
