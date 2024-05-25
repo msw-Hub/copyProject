@@ -244,4 +244,13 @@ public class MyPageService {
         }
         return mapToDTO3(pet);
     }
+    public int getCoin(String accessToken) {
+        accessToken = accessToken.split(" ")[1];
+        String username = jwtUtil.getUsername(accessToken, 1);
+        UserEntity user = userRepository.findByUsername(username);
+        if (user == null) {
+            throw new IllegalArgumentException("사용자를 찾을 수 없습니다.");
+        }
+        return user.getCoin();
+    }
 }

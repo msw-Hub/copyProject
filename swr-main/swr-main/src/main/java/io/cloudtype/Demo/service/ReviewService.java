@@ -3,17 +3,17 @@ package io.cloudtype.Demo.service;
 
 import io.cloudtype.Demo.Dto.Care.CareReviewDTO;
 import io.cloudtype.Demo.Dto.Walk.WalkReviewDTO;
-import io.cloudtype.Demo.entity.Care.CareRecodeEntity;
+import io.cloudtype.Demo.entity.Care.CareRecordEntity;
 import io.cloudtype.Demo.entity.Care.CareReviewEntity;
 import io.cloudtype.Demo.entity.UserEntity;
-import io.cloudtype.Demo.entity.Walk.WalkRecodeEntity;
+import io.cloudtype.Demo.entity.Walk.WalkRecordEntity;
 import io.cloudtype.Demo.entity.Walk.WalkReviewEntity;
 import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.repository.Care.CarePostRepository;
-import io.cloudtype.Demo.repository.Care.CareRecodeRepository;
+import io.cloudtype.Demo.repository.Care.CareRecordRepository;
 import io.cloudtype.Demo.repository.Care.CareReviewRepository;
 import io.cloudtype.Demo.repository.UserRepository;
-import io.cloudtype.Demo.repository.Walk.WalkRecodeRepository;
+import io.cloudtype.Demo.repository.Walk.WalkRecordRepository;
 import io.cloudtype.Demo.repository.Walk.WalkReviewRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,26 +29,26 @@ import java.util.stream.Collectors;
 public class ReviewService {
     private final UserRepository userRepository;
     private final JWTUtil jwtUtil;
-    private final WalkRecodeRepository walkRecodeRepository;
+    private final WalkRecordRepository walkRecordRepository;
     private final WalkReviewRepository walkReviewRepository;
     private final CommunityBoardService communityBoardService;
-    private final CareRecodeRepository careRecodeRepository;
+    private final CareRecordRepository careRecordRepository;
     private final CareReviewRepository careReviewRepository;
     private final CarePostRepository carePostRepository;
     @Autowired
     public ReviewService(UserRepository userRepository, JWTUtil jwtUtil,
-                         WalkRecodeRepository walkRecodeRepository, WalkReviewRepository walkReviewRepository,
+                         WalkRecordRepository walkRecordRepository, WalkReviewRepository walkReviewRepository,
                          CommunityBoardService communityBoardService,
-                            CareRecodeRepository careRecodeRepository,
-                            CareReviewRepository careReviewRepository,
-                            CarePostRepository carePostRepository
+                         CareRecordRepository careRecordRepository,
+                         CareReviewRepository careReviewRepository,
+                         CarePostRepository carePostRepository
     ) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
-        this.walkRecodeRepository = walkRecodeRepository;
+        this.walkRecordRepository = walkRecordRepository;
         this.walkReviewRepository = walkReviewRepository;
         this.communityBoardService = communityBoardService;
-        this.careRecodeRepository = careRecodeRepository;
+        this.careRecordRepository = careRecordRepository;
         this.careReviewRepository = careReviewRepository;
         this.carePostRepository = carePostRepository;
     }
@@ -60,7 +60,7 @@ public class ReviewService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        WalkRecodeEntity walkRecode = walkRecodeRepository.findById(walkRecodeId);
+        WalkRecordEntity walkRecode = walkRecordRepository.findById(walkRecodeId);
         if (walkRecode == null) {
             throw new IllegalArgumentException("해당 산책기록을 찾을 수 없습니다");
         }
@@ -82,7 +82,7 @@ public class ReviewService {
         }
         //리뷰 작성여부 수정
         walkRecode.setReview(true);
-        walkRecodeRepository.save(walkRecode);
+        walkRecordRepository.save(walkRecode);
         //리뷰 작성
         WalkReviewEntity review = new WalkReviewEntity();
         review.setWalkRecode(walkRecode);
@@ -194,7 +194,7 @@ public class ReviewService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        CareRecodeEntity careRecode = careRecodeRepository.findById(careRecodeId);
+        CareRecordEntity careRecode = careRecordRepository.findById(careRecodeId);
         if (careRecode == null) {
             throw new IllegalArgumentException("해당 돌봄기록을 찾을 수 없습니다");
         }
@@ -213,7 +213,7 @@ public class ReviewService {
         }
         //리뷰 작성여부 수정
         careRecode.setReview(true);
-        careRecodeRepository.save(careRecode);
+        careRecordRepository.save(careRecode);
         //리뷰 작성
         CareReviewEntity review = new CareReviewEntity();
         review.setCareRecode(careRecode);

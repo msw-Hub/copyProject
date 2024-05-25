@@ -16,7 +16,7 @@ public class CareReviewEntity {
 
     @OneToOne
     @JoinColumn(name = "care_recode_id")  // 외래 키 컬럼 이름 지정
-    private CareRecodeEntity careRecode;  // 연관된 CareRecodeEntity 객체
+    private CareRecordEntity careRecode;  // 연관된 CareRecodeEntity 객체
 
     private double rating;          //평점
     private String content;         //리뷰 내용

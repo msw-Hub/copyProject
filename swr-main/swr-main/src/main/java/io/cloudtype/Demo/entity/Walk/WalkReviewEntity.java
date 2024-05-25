@@ -16,7 +16,7 @@ public class WalkReviewEntity {
 
     @OneToOne
     @JoinColumn(name = "walk_recode_id")  // 외래 키 컬럼 이름 지정
-    private WalkRecodeEntity walkRecode;  // 연관된 WalkRecodeEntity 객체
+    private WalkRecordEntity walkRecode;  // 연관된 WalkRecodeEntity 객체
 
     private double rating;          //평점
     private String content;         //리뷰 내용

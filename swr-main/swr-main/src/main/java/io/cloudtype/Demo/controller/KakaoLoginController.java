@@ -105,18 +105,8 @@ public class KakaoLoginController {
         headers.add("Authorization", "Bearer " + jwtAccessToken);
         headers.add("refresh_token", jwtRefreshToken);
 
-
-        // JSON 응답에 포함할 데이터 준비
-        Map<String, Object> jsonResponse = new HashMap<>();
-        jsonResponse.put("login_or_sign", logMessage);
-        jsonResponse.put("email", email);
-
-        // ObjectMapper를 사용하여 Map 객체를 JSON 문자열로 변환
-        ObjectMapper objectMapper = new ObjectMapper();
-        String jsonString = objectMapper.writeValueAsString(jsonResponse);
-
         // 프론트엔드에 전달할 응답 생성
-        return ResponseEntity.ok().headers(headers).body(jsonString);
+        return ResponseEntity.ok().headers(headers).body("카카오 로그인 성공");
     }
     //https://kauth.kakao.com/oauth/authorize?response_type=code&client_id=53035b0763b5b30c2d9270a501fb614b&redirect_uri=https://port-0-swr-17xco2nlst8pr67.sel5.cloudtype.app/callback
 }

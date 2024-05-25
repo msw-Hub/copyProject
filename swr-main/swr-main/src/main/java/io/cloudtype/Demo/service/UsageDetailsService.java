@@ -5,14 +5,14 @@ import io.cloudtype.Demo.Dto.Care.CareUsageSimpleDTO;
 import io.cloudtype.Demo.Dto.Walk.WalkUsageDetailsDTO;
 import io.cloudtype.Demo.Dto.Walk.WalkUsageSimpleDTO;
 import io.cloudtype.Demo.entity.Care.CarePostEntity;
-import io.cloudtype.Demo.entity.Care.CareRecodeEntity;
+import io.cloudtype.Demo.entity.Care.CareRecordEntity;
 import io.cloudtype.Demo.entity.UserEntity;
-import io.cloudtype.Demo.entity.Walk.WalkRecodeEntity;
+import io.cloudtype.Demo.entity.Walk.WalkRecordEntity;
 import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.repository.Care.CarePostRepository;
-import io.cloudtype.Demo.repository.Care.CareRecodeRepository;
+import io.cloudtype.Demo.repository.Care.CareRecordRepository;
 import io.cloudtype.Demo.repository.UserRepository;
-import io.cloudtype.Demo.repository.Walk.WalkRecodeRepository;
+import io.cloudtype.Demo.repository.Walk.WalkRecordRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,16 +25,16 @@ import java.util.stream.Collectors;
 public class UsageDetailsService {
     private final UserRepository userRepository;
     private final JWTUtil jwtUtil;
-    private final WalkRecodeRepository walkRecodeRepository;
-    private final CareRecodeRepository careRecodeRepository;
+    private final WalkRecordRepository walkRecordRepository;
+    private final CareRecordRepository careRecordRepository;
     private final CarePostRepository carePostRepository;
     @Autowired
-    public UsageDetailsService(UserRepository userRepository, JWTUtil jwtUtil, WalkRecodeRepository walkRecodeRepository,
-                               CareRecodeRepository careRecodeRepository, CarePostRepository carePostRepository) {
+    public UsageDetailsService(UserRepository userRepository, JWTUtil jwtUtil, WalkRecordRepository walkRecordRepository,
+                               CareRecordRepository careRecordRepository, CarePostRepository carePostRepository) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
-        this.walkRecodeRepository = walkRecodeRepository;
-        this.careRecodeRepository = careRecodeRepository;
+        this.walkRecordRepository = walkRecordRepository;
+        this.careRecordRepository = careRecordRepository;
         this.carePostRepository = carePostRepository;
     }
     //유저의 산책이용내역보기
@@ -45,22 +45,22 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        List<WalkRecodeEntity> walkRecodeList = walkRecodeRepository.findByUser_IdOrderByCreateDateDesc(user.getId());
+        List<WalkRecordEntity> walkRecodeList = walkRecordRepository.findByUser_IdOrderByCreateDateDesc(user.getId());
         return walkRecodeList.stream()
                 .map(this::getWalkUsageDetailSimplified)
                 .collect(Collectors.toList());
     }
-    private WalkUsageSimpleDTO getWalkUsageDetailSimplified(WalkRecodeEntity walkRecodeEntity) {
+    private WalkUsageSimpleDTO getWalkUsageDetailSimplified(WalkRecordEntity walkRecordEntity) {
         WalkUsageSimpleDTO walkUsageDTO = new WalkUsageSimpleDTO();
-        walkUsageDTO.setWalkRecodeId(walkRecodeEntity.getId());
-        walkUsageDTO.setUserNickname(walkRecodeEntity.getUser().getNickname());
-        walkUsageDTO.setUserImage(walkRecodeEntity.getUser().getProfileImage());
-        walkUsageDTO.setWalkerNickname(walkRecodeEntity.getWalker().getNickname());
-        walkUsageDTO.setWalkerImage(walkRecodeEntity.getWalker().getProfileImage());
-        walkUsageDTO.setPetName(walkRecodeEntity.getPet().getPetName());
-        walkUsageDTO.setWalkTime(walkRecodeEntity.getWalkTime());
-        walkUsageDTO.setEndTime(walkRecodeEntity.getEndTime());
-        walkUsageDTO.setAmount(walkRecodeEntity.getAmount());
+        walkUsageDTO.setWalkRecodeId(walkRecordEntity.getId());
+        walkUsageDTO.setUserNickname(walkRecordEntity.getUser().getNickname());
+        walkUsageDTO.setUserImage(walkRecordEntity.getUser().getProfileImage());
+        walkUsageDTO.setWalkerNickname(walkRecordEntity.getWalker().getNickname());
+        walkUsageDTO.setWalkerImage(walkRecordEntity.getWalker().getProfileImage());
+        walkUsageDTO.setPetName(walkRecordEntity.getPet().getPetName());
+        walkUsageDTO.setWalkTime(walkRecordEntity.getWalkTime());
+        walkUsageDTO.setEndTime(walkRecordEntity.getEndTime());
+        walkUsageDTO.setAmount(walkRecordEntity.getAmount());
         return walkUsageDTO;
     }
 
@@ -71,7 +71,7 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        WalkRecodeEntity walkRecode = walkRecodeRepository.findById(walkRecodeId);
+        WalkRecordEntity walkRecode = walkRecordRepository.findById(walkRecodeId);
         if (walkRecode == null) {
             throw new IllegalArgumentException("해당 산책기록을 찾을 수 없습니다");
         }
@@ -80,30 +80,30 @@ public class UsageDetailsService {
         }
         return getWalkUsageDetail(walkRecode);
     }
-    private WalkUsageDetailsDTO getWalkUsageDetail(WalkRecodeEntity walkRecodeEntity) {
+    private WalkUsageDetailsDTO getWalkUsageDetail(WalkRecordEntity walkRecordEntity) {
         WalkUsageDetailsDTO walkUsageDTO = new WalkUsageDetailsDTO();
-        walkUsageDTO.setWalkRecodeId(walkRecodeEntity.getId());
-        walkUsageDTO.setUserNickname(walkRecodeEntity.getUser().getNickname());
-        walkUsageDTO.setUserImage(walkRecodeEntity.getUser().getProfileImage());
-        walkUsageDTO.setWalkerNickname(walkRecodeEntity.getWalker().getNickname());
-        walkUsageDTO.setWalkerImage(walkRecodeEntity.getWalker().getProfileImage());
-        walkUsageDTO.setPetName(walkRecodeEntity.getPet().getPetName());
-        walkUsageDTO.setPetImage(walkRecodeEntity.getPet().getPetImage());
-        walkUsageDTO.setPetGender(walkRecodeEntity.getPet().getGender());
-        walkUsageDTO.setPetSpecies(walkRecodeEntity.getPet().getSpecies());
-        walkUsageDTO.setPetBirthYear(walkRecodeEntity.getPet().getBirthYear());
-        walkUsageDTO.setWalkTime(walkRecodeEntity.getWalkTime());
-        walkUsageDTO.setStartTime(walkRecodeEntity.getStartTime());
-        walkUsageDTO.setEndTime(walkRecodeEntity.getEndTime());
-        walkUsageDTO.setLatitude(walkRecodeEntity.getLatitude());
-        walkUsageDTO.setLongitude(walkRecodeEntity.getLongitude());
-        walkUsageDTO.setAddress(walkRecodeEntity.getAddress());
-        walkUsageDTO.setDetailAddress(walkRecodeEntity.getDetailAddress());
-        walkUsageDTO.setTitle(walkRecodeEntity.getTitle());
-        walkUsageDTO.setContent(walkRecodeEntity.getContent());
-        walkUsageDTO.setStatus(walkRecodeEntity.getStatus());
-        walkUsageDTO.setReason(walkRecodeEntity.getReason());
-        walkUsageDTO.setAmount(walkRecodeEntity.getAmount());
+        walkUsageDTO.setWalkRecodeId(walkRecordEntity.getId());
+        walkUsageDTO.setUserNickname(walkRecordEntity.getUser().getNickname());
+        walkUsageDTO.setUserImage(walkRecordEntity.getUser().getProfileImage());
+        walkUsageDTO.setWalkerNickname(walkRecordEntity.getWalker().getNickname());
+        walkUsageDTO.setWalkerImage(walkRecordEntity.getWalker().getProfileImage());
+        walkUsageDTO.setPetName(walkRecordEntity.getPet().getPetName());
+        walkUsageDTO.setPetImage(walkRecordEntity.getPet().getPetImage());
+        walkUsageDTO.setPetGender(walkRecordEntity.getPet().getGender());
+        walkUsageDTO.setPetSpecies(walkRecordEntity.getPet().getSpecies());
+        walkUsageDTO.setPetBirthYear(walkRecordEntity.getPet().getBirthYear());
+        walkUsageDTO.setWalkTime(walkRecordEntity.getWalkTime());
+        walkUsageDTO.setStartTime(walkRecordEntity.getStartTime());
+        walkUsageDTO.setEndTime(walkRecordEntity.getEndTime());
+        walkUsageDTO.setLatitude(walkRecordEntity.getLatitude());
+        walkUsageDTO.setLongitude(walkRecordEntity.getLongitude());
+        walkUsageDTO.setAddress(walkRecordEntity.getAddress());
+        walkUsageDTO.setDetailAddress(walkRecordEntity.getDetailAddress());
+        walkUsageDTO.setTitle(walkRecordEntity.getTitle());
+        walkUsageDTO.setContent(walkRecordEntity.getContent());
+        walkUsageDTO.setStatus(walkRecordEntity.getStatus());
+        walkUsageDTO.setReason(walkRecordEntity.getReason());
+        walkUsageDTO.setAmount(walkRecordEntity.getAmount());
         return walkUsageDTO;
     }
     public List<WalkUsageSimpleDTO> getPartnerWalkUsageList(String accessToken) {
@@ -113,7 +113,7 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        List<WalkRecodeEntity> walkRecodeList = walkRecodeRepository.findByWalker_IdOrderByCreateDateDesc(user.getId());
+        List<WalkRecordEntity> walkRecodeList = walkRecordRepository.findByWalker_IdOrderByCreateDateDesc(user.getId());
         return walkRecodeList.stream()
                 .map(this::getWalkUsageDetailSimplified)
                 .collect(Collectors.toList());
@@ -125,21 +125,21 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        List<CareRecodeEntity> careRecodeList = careRecodeRepository.findByOwner_IdOrderByEndDateDesc(user.getId());
+        List<CareRecordEntity> careRecodeList = careRecordRepository.findByOwner_IdOrderByEndDateDesc(user.getId());
         return careRecodeList.stream()
                 .map(this::getCareUsageDetailSimplified)
                 .collect(Collectors.toList());
     }
-    private CareUsageSimpleDTO getCareUsageDetailSimplified(CareRecodeEntity careRecodeEntity) {
+    private CareUsageSimpleDTO getCareUsageDetailSimplified(CareRecordEntity careRecordEntity) {
         CareUsageSimpleDTO careUsageDTO = new CareUsageSimpleDTO();
-        careUsageDTO.setCareRecodeId(careRecodeEntity.getId());
-        careUsageDTO.setUserNickname(careRecodeEntity.getOwner().getNickname());
-        careUsageDTO.setUserImage(careRecodeEntity.getOwner().getProfileImage());
-        careUsageDTO.setCaregiverNickname(careRecodeEntity.getCaregiver().getNickname());
-        careUsageDTO.setCaregiverImage(careRecodeEntity.getCaregiver().getProfileImage());
-        careUsageDTO.setPetName(careRecodeEntity.getPet().getPetName());
-        careUsageDTO.setStartDate(careRecodeEntity.getStartDate());
-        careUsageDTO.setAmount(careRecodeEntity.getAmount());
+        careUsageDTO.setCareRecodeId(careRecordEntity.getId());
+        careUsageDTO.setUserNickname(careRecordEntity.getOwner().getNickname());
+        careUsageDTO.setUserImage(careRecordEntity.getOwner().getProfileImage());
+        careUsageDTO.setCaregiverNickname(careRecordEntity.getCaregiver().getNickname());
+        careUsageDTO.setCaregiverImage(careRecordEntity.getCaregiver().getProfileImage());
+        careUsageDTO.setPetName(careRecordEntity.getPet().getPetName());
+        careUsageDTO.setStartDate(careRecordEntity.getStartDate());
+        careUsageDTO.setAmount(careRecordEntity.getAmount());
         return careUsageDTO;
     }
     public List<CareUsageSimpleDTO> getPartnerCareUsageList(String accessToken) {
@@ -149,7 +149,7 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        List<CareRecodeEntity> careRecodeList = careRecodeRepository.findByCaregiver_IdOrderByEndDateDesc(user.getId());
+        List<CareRecordEntity> careRecodeList = careRecordRepository.findByCaregiver_IdOrderByEndDateDesc(user.getId());
         return careRecodeList.stream()
                 .map(this::getCareUsageDetailSimplified)
                 .collect(Collectors.toList());
@@ -161,7 +161,7 @@ public class UsageDetailsService {
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
-        CareRecodeEntity careRecode = careRecodeRepository.findById(careRecodeId);
+        CareRecordEntity careRecode = careRecordRepository.findById(careRecodeId);
         if (careRecode == null) {
             throw new IllegalArgumentException("해당 돌봄기록을 찾을 수 없습니다");
         }
@@ -171,21 +171,21 @@ public class UsageDetailsService {
         CarePostEntity carePost = carePostRepository.findById(careRecode.getCaregiver().getId());
         return getCareUsageDetail(careRecode, carePost);
     }
-    private CareUsageDetailsDTO getCareUsageDetail(CareRecodeEntity careRecodeEntity, CarePostEntity carePostEntity) {
+    private CareUsageDetailsDTO getCareUsageDetail(CareRecordEntity careRecordEntity, CarePostEntity carePostEntity) {
         CareUsageDetailsDTO careUsageDTO = new CareUsageDetailsDTO();
-        careUsageDTO.setCareRecodeId(careRecodeEntity.getId());
-        careUsageDTO.setUserNickname(careRecodeEntity.getOwner().getNickname());
-        careUsageDTO.setUserImage(careRecodeEntity.getOwner().getProfileImage());
-        careUsageDTO.setCaregiverNickname(careRecodeEntity.getCaregiver().getNickname());
-        careUsageDTO.setCaregiverImage(careRecodeEntity.getCaregiver().getProfileImage());
+        careUsageDTO.setCareRecodeId(careRecordEntity.getId());
+        careUsageDTO.setUserNickname(careRecordEntity.getOwner().getNickname());
+        careUsageDTO.setUserImage(careRecordEntity.getOwner().getProfileImage());
+        careUsageDTO.setCaregiverNickname(careRecordEntity.getCaregiver().getNickname());
+        careUsageDTO.setCaregiverImage(careRecordEntity.getCaregiver().getProfileImage());
 
-        careUsageDTO.setPetName(careRecodeEntity.getPet().getPetName());
-        careUsageDTO.setPetImage(careRecodeEntity.getPet().getPetImage());
-        careUsageDTO.setPetGender(careRecodeEntity.getPet().getGender());
-        careUsageDTO.setPetSpecies(careRecodeEntity.getPet().getSpecies());
-        careUsageDTO.setPetBirthYear(careRecodeEntity.getPet().getBirthYear());
-        careUsageDTO.setStartDate(careRecodeEntity.getStartDate());
-        careUsageDTO.setEndDate(careRecodeEntity.getEndDate());
+        careUsageDTO.setPetName(careRecordEntity.getPet().getPetName());
+        careUsageDTO.setPetImage(careRecordEntity.getPet().getPetImage());
+        careUsageDTO.setPetGender(careRecordEntity.getPet().getGender());
+        careUsageDTO.setPetSpecies(careRecordEntity.getPet().getSpecies());
+        careUsageDTO.setPetBirthYear(careRecordEntity.getPet().getBirthYear());
+        careUsageDTO.setStartDate(careRecordEntity.getStartDate());
+        careUsageDTO.setEndDate(careRecordEntity.getEndDate());
 
         careUsageDTO.setLatitude(carePostEntity.getLatitude());
         careUsageDTO.setLongitude(carePostEntity.getLongitude());
@@ -197,9 +197,9 @@ public class UsageDetailsService {
         careUsageDTO.setTitle(carePostEntity.getTitle());
         careUsageDTO.setContent(carePostEntity.getContent());
 
-        careUsageDTO.setStatus(careRecodeEntity.getStatus());
-        careUsageDTO.setReason(careRecodeEntity.getReason());
-        careUsageDTO.setAmount(careRecodeEntity.getAmount());
+        careUsageDTO.setStatus(careRecordEntity.getStatus());
+        careUsageDTO.setReason(careRecordEntity.getReason());
+        careUsageDTO.setAmount(careRecordEntity.getAmount());
         return careUsageDTO;
     }
 }

@@ -184,4 +184,15 @@ public class MyPageController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+    //마이페이지 접근시, 남은 코인 보여주기
+    @GetMapping("/coin")
+    public ResponseEntity<?> getCoin(@RequestHeader("Authorization") String accessToken
+    ) {
+        try {
+            int coin = myPageService.getCoin(accessToken);
+            return ResponseEntity.ok(coin);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

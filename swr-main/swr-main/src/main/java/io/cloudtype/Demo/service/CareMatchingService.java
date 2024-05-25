@@ -43,7 +43,8 @@ public class CareMatchingService {
     private final PetRepository petRepository;
     private final CareMatchingRepository careMatchingRepository;
     private final CommunityBoardService communityBoardService;
-    private final CareRecodeRepository careRecodeRepository;
+    private final CareRecordRepository careRecordRepository;
+    private final SseService sseService;
 
     private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -55,7 +56,8 @@ public class CareMatchingService {
             PetRepository petRepository,
             CareMatchingRepository careMatchingRepository,
             CommunityBoardService communityBoardService,
-            CareRecodeRepository careRecodeRepository
+            CareRecordRepository careRecordRepository,
+            SseService sseService
     ) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
@@ -65,7 +67,8 @@ public class CareMatchingService {
         this.careMatchingRepository = careMatchingRepository;
         this.communityBoardService = communityBoardService;
         this.reservationSchedulerRepository = reservationSchedulerRepository;
-        this.careRecodeRepository = careRecodeRepository;
+        this.careRecordRepository = careRecordRepository;
+        this.sseService = sseService;
     }
 
     @Transactional
@@ -150,6 +153,10 @@ public class CareMatchingService {
         if (carePost.getCaregiver().getId() == user.getId()) {
             throw new IllegalStateException("자신의 글에는 신청할 수 없습니다");
         }
+        if(careApplyDTO.getAmount()> user.getCoin()){
+            throw new IllegalStateException("코인이 부족합니다 충전후 이용해주세요");
+        }
+
         // 예약 시작일과 종료일을 LocalDate로 변환하여 날짜 리스트를 만듭니다.
         LocalDate startDate = careApplyDTO.getReservationStartDate().toLocalDate();
         LocalDate endDate = careApplyDTO.getReservationEndDate().toLocalDate();
@@ -195,6 +202,9 @@ public class CareMatchingService {
         careMatching.setReservationEndDate(careApplyDTO.getReservationEndDate());
         careMatching.setRequestMessage(careApplyDTO.getRequestMessage());
         careMatchingRepository.save(careMatching);
+
+        //돌봄글 작성자에게 신청자가 있음을 알림
+        sseService.notifyMatch(String.valueOf(carePost.getCaregiver().getId()), "신청자가 있습니다", 2);
     }
 
     @Transactional
@@ -565,6 +575,9 @@ public class CareMatchingService {
         if (careMatching.getReservationStartDate().isBefore(LocalDateTime.now())) {
             throw new IllegalStateException("예약 시간이 현재 시간보다 이전입니다");
         }
+        if(careMatching.getAmount()> careMatching.getOwner().getCoin()){
+            throw new IllegalStateException("상대방이 코인이 부족합니다 다른 고객을 선택해주세요");
+        }
         // 예약 시작일과 종료일을 LocalDate로 변환하여 날짜 리스트를 만듭니다.
         LocalDate startDate = careMatching.getReservationStartDate().toLocalDate();
         LocalDate endDate = careMatching.getReservationEndDate().toLocalDate();
@@ -611,8 +624,12 @@ public class CareMatchingService {
         careMatchingRepository.save(careMatching);
         carePost.setReservations(carePost.getReservations() + 1);
         carePostRepository.save(carePost);
-        //예약 수락한거 메세지 보내야함 양쪽-이건 지금 구현x
-        //결제-이건 지금 구현x
+        //예약 수락한거 메세지 보내야함 양쪽
+        sseService.notifyMatch(String.valueOf(careMatching.getOwner().getId()), "예약이 수락되었습니다", 1);
+        sseService.notifyMatch(String.valueOf(careMatching.getCarePost().getCaregiver().getId()), "예약이 수락되었습니다", 1);
+
+        //결제 - 차감만 하면됌
+        careMatching.getOwner().setCoin(careMatching.getOwner().getCoin()-careMatching.getAmount());
     }
     @Transactional
     public void rejectCare(String accessToken, int careMatchingId) {
@@ -631,7 +648,8 @@ public class CareMatchingService {
             throw new IllegalStateException("이미 수락한 예약입니다");
         }
         careMatchingRepository.delete(careMatching);
-        //예약 거절한거 메세지 보내야함 양쪽
+        //예약 거절한거 메세지 보내야함
+        sseService.notifyMatch(String.valueOf(careMatching.getOwner().getId()), "예약이 거절되었습니다", 5);
     }
     @Transactional
     public void cancelApply(String accessToken, int careMatchingId) {
@@ -693,8 +711,10 @@ public class CareMatchingService {
                 reservationSchedulerRepository.delete(reservationSchedulerEntity);
             }
         }
-        //예약 취소한거 메세지 보내야함 양쪽
+        //예약 취소한거 메세지 보내야함
+        sseService.notifyMatch(String.valueOf(careMatching.getCarePost().getCaregiver().getId()), "예약이 취소되었습니다", 3);
         //환불
+        careMatching.getOwner().setCoin(careMatching.getOwner().getCoin()+careMatching.getAmount());
     }
     @Transactional
     public void startCare(String accessToken, int careMatchingId) {
@@ -720,6 +740,8 @@ public class CareMatchingService {
         careMatching.setStartDate(LocalDateTime.now());
         careMatchingRepository.save(careMatching);
         //돌봄 시작 메세지 보내야함 양쪽
+        sseService.notifyMatch(String.valueOf(careMatching.getOwner().getId()), "돌봄이 시작되었습니다", 6);
+        sseService.notifyMatch(String.valueOf(careMatching.getCarePost().getCaregiver().getId()), "돌봄이 시작되었습니다", 6);
     }
     @Transactional
     public int completeCare(String accessToken, int careMatchingId) {
@@ -741,7 +763,7 @@ public class CareMatchingService {
         carePost.setReservations(carePost.getReservations() - 1);
         carePostRepository.save(carePost);
 
-        CareRecodeEntity careRecode = new CareRecodeEntity();
+        CareRecordEntity careRecode = new CareRecordEntity();
         careRecode.setCaregiver(user);
         careRecode.setPet(careMatching.getPet());
         careRecode.setOwner(careMatching.getOwner());
@@ -753,8 +775,11 @@ public class CareMatchingService {
         careRecode.setAmount(careMatching.getAmount());
         careRecode.setRequestMessage(careMatching.getRequestMessage());
         careRecode.setReview(false);
-        careRecodeRepository.save(careRecode);
+        careRecordRepository.save(careRecode);
         //돌봄 완료 메세지 보내야함 양쪽
+        sseService.notifyMatch(String.valueOf(careMatching.getOwner().getId()), "돌봄이 완료되었습니다", 4);
+        sseService.notifyMatch(String.valueOf(careMatching.getCarePost().getCaregiver().getId()), "돌봄이 완료되었습니다", 4);
+
         return careRecode.getId();
     }
     @Transactional
@@ -773,7 +798,7 @@ public class CareMatchingService {
         if (careMatching.getStatus() != 2) {
             throw new IllegalStateException("시작되지 않은 예약은 완료할 수 없습니다");
         }
-        CareRecodeEntity careRecode = new CareRecodeEntity();
+        CareRecordEntity careRecode = new CareRecordEntity();
         careRecode.setCaregiver(user);
         careRecode.setPet(careMatching.getPet());
         careRecode.setOwner(careMatching.getOwner());
@@ -786,7 +811,9 @@ public class CareMatchingService {
         careRecode.setRequestMessage(careMatching.getRequestMessage());
         careRecode.setReview(false);
         careRecode.setReason(reason);
-        careRecodeRepository.save(careRecode);
+        careRecordRepository.save(careRecode);
         //돌봄 미완료 메세지 보내야함 양쪽
+        sseService.notifyMatch(String.valueOf(careMatching.getOwner().getId()), "돌봄이 미완료되었습니다", 7);
+        sseService.notifyMatch(String.valueOf(careMatching.getCarePost().getCaregiver().getId()), "돌봄이 미완료되었습니다", 7);
     }
 }

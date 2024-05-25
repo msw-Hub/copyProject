@@ -39,6 +39,9 @@ public class UserEntity {
     private double careRating;          //돌봄서비스 평점
     private int careReviewCount;            //돌봄서비스 리뷰수
 
+    //추추가
+    private int coin;            //코인
+
     @PrePersist
     public void prePersist() {
         this.kakaoLogin = false;    //카카오로그인 여부 설정

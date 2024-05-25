@@ -6,13 +6,13 @@ import io.cloudtype.Demo.entity.PetEntity;
 import io.cloudtype.Demo.entity.UserEntity;
 import io.cloudtype.Demo.entity.WaiterEntity;
 import io.cloudtype.Demo.entity.Walk.WalkMatchingEntity;
-import io.cloudtype.Demo.entity.Walk.WalkRecodeEntity;
+import io.cloudtype.Demo.entity.Walk.WalkRecordEntity;
 import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.repository.PetRepository;
 import io.cloudtype.Demo.repository.UserRepository;
 import io.cloudtype.Demo.repository.WaiterRepository;
 import io.cloudtype.Demo.repository.Walk.WalkMatchingRepository;
-import io.cloudtype.Demo.repository.Walk.WalkRecodeRepository;
+import io.cloudtype.Demo.repository.Walk.WalkRecordRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,7 +48,8 @@ public class WalkMatchingService {
     private final JWTUtil jwtUtil;
     private final WalkMatchingRepository walkMatchingRepository;
     private final WaiterRepository waiterRepository;
-    private final WalkRecodeRepository walkRecodeRepository;
+    private final WalkRecordRepository walkRecordRepository;
+    private final SseService sseService;
 
     @Autowired
     public WalkMatchingService(@Value("${spring.cloud.gcp.storage.credentials.location}") String keyFileName,
@@ -57,7 +58,8 @@ public class WalkMatchingService {
                                UserRepository userRepository, PetRepository petRepository, JWTUtil jwtUtil,
                                WalkMatchingRepository walkMatchingRepository,
                                WaiterRepository waiterRepository,
-                               WalkRecodeRepository walkRecodeRepository
+                               WalkRecordRepository walkRecordRepository,
+                                 SseService sseService
     ) {
         this.keyFileName = keyFileName;
         this.projectId = projectId;
@@ -67,7 +69,8 @@ public class WalkMatchingService {
         this.jwtUtil = jwtUtil;
         this.walkMatchingRepository = walkMatchingRepository;
         this.waiterRepository = waiterRepository;
-        this.walkRecodeRepository = walkRecodeRepository;
+        this.walkRecordRepository = walkRecordRepository;
+        this.sseService = sseService;
     }
 
     @Transactional
@@ -77,6 +80,9 @@ public class WalkMatchingService {
         UserEntity user = userRepository.findByUsername(username);
         if (user == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
+        }
+        if(user.getCoin()< walkMatchingEntity.getAmount()) {
+            throw new IllegalArgumentException("코인이 부족합니다 (산책비용 부족)");
         }
         int petId = walkMatchingEntity.getPetId();
         PetEntity pet = petRepository.findById(petId);
@@ -121,6 +127,7 @@ public class WalkMatchingService {
         post.setDetailAddress(walkMatchingEntity.getDetailAddress());
         post.setTitle(walkMatchingEntity.getTitle());
         post.setContent(walkMatchingEntity.getContent());
+        post.setAmount(walkMatchingEntity.getAmount());
 
         walkMatchingRepository.save(post);
         //저장되면 DB 트리거에 의해서 자동 5분이 지나면 삭제, 단 status가 0인 경우에만 해당. 1로 바뛰면 유지
@@ -228,6 +235,8 @@ public class WalkMatchingService {
         waiter.setWriter(post.getUser());
         waiter.setWaiter(user);
         waiterRepository.save(waiter);
+        //신청이 완료되었음으로 주인에게 신청 알람을 보내야함
+        sseService.notifyMatch(String.valueOf(post.getUser().getId()), "신청이 들어왔습니다",2);
     }
     public WalkMatchingDTO myPost(String accessToken) {
         accessToken = accessToken.split(" ")[1];
@@ -326,6 +335,8 @@ public class WalkMatchingService {
         waiterRepository.deleteByWaiterId(waiterId);
         //서브 서버에게 매칭완료 메세지와 채팅방 개설 요청을 보내야함
         //양쪽에게 매칭완료 메세지를 보내야함
+        sseService.notifyMatch(String.valueOf(post.getUser().getId()), "매칭이 성사되었습니다",1);
+        sseService.notifyMatch(String.valueOf(waiterId), "매칭이 성사되었습니다",1);
     }
     @Transactional
     public void deletePost(String accessToken, int postId) {
@@ -391,6 +402,7 @@ public class WalkMatchingService {
         post.setStartTime(LocalDateTime.now());
         walkMatchingRepository.save(post);
         //주인에게 산책 시작 알람을 보내야함
+        sseService.notifyMatch(String.valueOf(post.getUser().getId()), "산책이 시작되었습니다",6);
     }
     @Transactional
     public int end(String accessToken, int postId) {
@@ -410,6 +422,9 @@ public class WalkMatchingService {
         if (post.getStatus() != 2) {
             throw new IllegalArgumentException("산책중인 게시글이 아닙니다");
         }
+        if(post.getUser().getCoin()< post.getAmount()) {
+            throw new IllegalArgumentException("코인이 부족합니다 충전을 해주세요");
+        }
         //산책 시작 시간과 현재 시간을 빼서 실제 산책 시간을 계산하여, 처음 요구한 walkTime을 넘었는지를 비교
         int walkTime = post.getWalkTime();
         LocalDateTime startTime = post.getStartTime();  // 산책 시작 시간
@@ -420,18 +435,19 @@ public class WalkMatchingService {
             throw new IllegalArgumentException("산책 시간을 충족하지 못하였습니다");
         }
         //고객의 토큰 계산내용 들가야함.
-
+        post.getUser().setCoin(post.getUser().getCoin()-post.getAmount());
         //파트너에게 산책 종료 알람을 보내야함
+        sseService.notifyMatch(String.valueOf(post.getWalker().getId()), "산책이 완료되었습니다",4);
+
         int status = 3; // 산책 완료
         String reason = "no problem"; // 문제가 없을 경우
         //레코드 테이블로 이동
-        int recodeId = createRecode(post, now, status, reason);
+        int recodeId = createRecord(post, now, status, reason);
         walkMatchingRepository.delete(post);
-
         return recodeId;
     }
-    private int createRecode(WalkMatchingEntity post, LocalDateTime now, int status, String reason) {
-        WalkRecodeEntity walkRecode = new WalkRecodeEntity();
+    private int createRecord(WalkMatchingEntity post, LocalDateTime now, int status, String reason) {
+        WalkRecordEntity walkRecode = new WalkRecordEntity();
         walkRecode.setUser(post.getUser());
         walkRecode.setPet(post.getPet());
         walkRecode.setWalkTime(post.getWalkTime());
@@ -451,7 +467,8 @@ public class WalkMatchingService {
             walkRecode.setStatus(4);
             walkRecode.setReason(reason);
         }
-        walkRecodeRepository.save(walkRecode);
+        walkRecode.setAmount(post.getAmount());
+        walkRecordRepository.save(walkRecode);
         return walkRecode.getId();
     }
     @Transactional
@@ -473,9 +490,12 @@ public class WalkMatchingService {
             throw new IllegalArgumentException("산책중인 게시글이 아닙니다");
         }
         //파트너에게 산책 비정상종료 알람을 보내야함
+        sseService.notifyMatch(String.valueOf(post.getWalker().getId()), "산책이 비정상 종료되었습니다",7);
+        sseService.notifyMatch(String.valueOf(post.getUser().getId()), "산책이 비정상 종료되었습니다",7);
+
         int status = 4; // 산책 미완료
         //레코드 테이블로 이동
-        int walkRecodeId = createRecode(post, LocalDateTime.now(), status, reason);
+        int walkRecodeId = createRecord(post, LocalDateTime.now(), status, reason);
         walkMatchingRepository.delete(post);
     }
 }

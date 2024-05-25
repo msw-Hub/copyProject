@@ -64,7 +64,7 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
         String role = auth.getAuthority();
 
         String accessToken = jwtUtil.createAccessToken(username, role, 36000000L); //10시간
-        String refreshToken = jwtUtil.createRefreshToken(username, role, 60*60*24*7L); //1주일
+        String refreshToken = jwtUtil.createRefreshToken(username, role, 60*60*24*7*1000L); //1주일
 
         // 리프레시 토큰을 데이터베이스에 저장
         UserEntity user = userRepository.findByUsername(username);
