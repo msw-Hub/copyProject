@@ -1,8 +1,7 @@
 package io.cloudtype.Demo.jwt;
 
-import io.cloudtype.Demo.Dto.CustomUserDetails;
-import io.cloudtype.Demo.entity.UserEntity;
-import io.cloudtype.Demo.repository.UserRepository;
+import io.cloudtype.Demo.mypage.user.UserEntity;
+import io.cloudtype.Demo.mypage.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -13,8 +12,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.bind.annotation.CrossOrigin;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Iterator;
 
@@ -69,11 +69,12 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
         // 리프레시 토큰을 데이터베이스에 저장
         UserEntity user = userRepository.findByUsername(username);
         int partner = user.getPartnership();
-        String nickname = user.getNickname();
         String profileImage = user.getProfileImage();
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
-
+        String email = user.getUsername();
+        String nickname;
+        String encodedNickname;
         //데이터베이스에 JoinDetails가 저장되어있는지를 확인
         String birth = user.getBirth();
         if(birth == null) {
@@ -82,13 +83,18 @@ public class LoginFilter extends UsernamePasswordAuthenticationFilter {
         } else {
             //JoinDetails가 있는 경우
             response.addHeader("JoinDetails", "true");
+            // URL 인코딩하여 닉네임을 헤더에 추가
+            nickname = user.getNickname();
+            encodedNickname = URLEncoder.encode(nickname, StandardCharsets.UTF_8);
+            response.addHeader("nickname", encodedNickname);
+            log.info("nickname: " + encodedNickname);
         }
 
         response.addHeader("Authorization", "Bearer " + accessToken);
         response.addHeader("refresh_token", refreshToken);
         response.addHeader("partnership", String.valueOf(partner));
-        response.addHeader("nickname", nickname);
         response.addHeader("profileImage", profileImage);
+        response.addHeader("email", email);
     }
 
     //로그인 실패시 실행하는 메소드

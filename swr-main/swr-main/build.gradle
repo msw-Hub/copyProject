@@ -48,6 +48,13 @@ dependencies {
 	implementation 'io.jsonwebtoken:jjwt-jackson:0.12.3'
 	//json
 	implementation 'org.json:json:20211205'
+	//WebClient
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+	//웹소켓 의존성
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+	implementation 'org.springframework:spring-messaging'
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.3'
 }
 
 tasks.named('bootBuildImage') {

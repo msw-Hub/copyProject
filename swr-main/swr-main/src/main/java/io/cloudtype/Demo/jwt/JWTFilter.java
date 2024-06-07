@@ -1,8 +1,8 @@
 package io.cloudtype.Demo.jwt;
 
-import io.cloudtype.Demo.Dto.CustomUserDetails;
-import io.cloudtype.Demo.entity.UserEntity;
-import io.cloudtype.Demo.repository.UserRepository;
+import io.cloudtype.Demo.mypage.user.BlacklistRepository;
+import io.cloudtype.Demo.mypage.user.UserEntity;
+import io.cloudtype.Demo.mypage.user.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,10 +20,13 @@ public class JWTFilter extends OncePerRequestFilter {
 
     private final JWTUtil jwtUtil;
     private final UserRepository userRepository;
+    private final BlacklistRepository blacklistRepository;
 
-    public JWTFilter(JWTUtil jwtUtil, UserRepository userRepository) {
+    public JWTFilter(JWTUtil jwtUtil, UserRepository userRepository, BlacklistRepository blacklistRepository
+    ) {
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
+        this.blacklistRepository = blacklistRepository;
     }
 
     @Override
@@ -38,14 +41,20 @@ public class JWTFilter extends OncePerRequestFilter {
 
         String accessToken = authorization.split(" ")[1];
 
+        //엑세스 토큰이 유효하지 않은 경우
         if (jwtUtil.isExpired(accessToken, 1)) {
             String refreshToken = request.getHeader("X-Refresh-Token");
-
+            //리프레시 토큰이 없는 경우
             if(refreshToken == null) {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "RefreshToken not found");
                 return;
             }
-
+            //블랙리스트인 리프레시 토큰인가
+            if(blacklistRepository.existsByRefreshToken(refreshToken)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Blacklisted refreshToken");
+                return;
+            }
+            //리프레시 토큰의 유효기간이 끝난 경우 - 재로그인
             if(jwtUtil.isExpired(refreshToken, 2)) {
                 response.setStatus(402);
                 response.setContentType("application/json");
@@ -54,13 +63,18 @@ public class JWTFilter extends OncePerRequestFilter {
                 response.getWriter().flush();
                 return;
             }
-
             String username = jwtUtil.getUsername(refreshToken,2);
             UserEntity user = userRepository.findByUsername(username);
             String refreshTokenDB = user.getRefreshToken();
-
+            //데이터 베이스에 저장된 리프레시 토큰과 일치하지 않은 경우
             if (!refreshToken.equals(refreshTokenDB)) {
                 response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "RefreshToken mismatch");
+                return;
+            }
+            // 리프레시 토큰과 엑세스 토큰의 유저 정보 일치 여부 확인
+            String expiredUsername = jwtUtil.getUsername(accessToken, 1);
+            if (!username.equals(expiredUsername)) {
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Username mismatch");
                 return;
             }
 
@@ -74,6 +88,11 @@ public class JWTFilter extends OncePerRequestFilter {
             response.setCharacterEncoding("UTF-8");
             response.getWriter().write("{\"message\":\"New access token issued. Retry with the new token.\"}");
             response.getWriter().flush();
+            return;
+        }
+        //블랙리스트인 엑세스 토큰인가
+        if(blacklistRepository.existsByAccessToken(accessToken)) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Blacklisted accessToken");
             return;
         }
 
