@@ -8,12 +8,12 @@ import io.cloudtype.Demo.care.entity.*;
 import io.cloudtype.Demo.care.repository.*;
 import io.cloudtype.Demo.chat.ChatRoomService;
 import io.cloudtype.Demo.community.CommunityBoardService;
-import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.mypage.pet.PetEntity;
-import io.cloudtype.Demo.mypage.pet.PetRepository;
 import io.cloudtype.Demo.mypage.user.PartnerEntity;
 import io.cloudtype.Demo.mypage.user.PartnerRepository;
 import io.cloudtype.Demo.mypage.user.UserEntity;
+import io.cloudtype.Demo.jwt.JWTUtil;
+import io.cloudtype.Demo.mypage.pet.PetRepository;
 import io.cloudtype.Demo.mypage.user.UserRepository;
 import io.cloudtype.Demo.notification.NotificationService;
 import lombok.extern.slf4j.Slf4j;
@@ -210,13 +210,13 @@ public class CareMatchingService {
         careMatchingRepository.save(careMatching);
         //돌봄 신청으로 인한 알림
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "예약을 신청하였습니다");
+            notificationService.notifyUser(user.getUsername(), "유저:예약을 신청하였습니다");
         } else {
             log.warn("User " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity partner = carePost.getCaregiver();
         if (notificationService.isUserConnected(partner.getUsername())) {
-            notificationService.notifyUser(partner.getUsername(), "돌봄글에 신청이 왔습니다");
+            notificationService.notifyUser(partner.getUsername(), "파트너:돌봄글에 신청이 왔습니다");
         }else {
             log.warn("Partner " + partner.getUsername() + " is not connected. Notification not sent.");
         }
@@ -618,12 +618,12 @@ public class CareMatchingService {
         chatRoomService.createChatRoom(consumer, user);
         //돌봄 예약 성공 알림
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "돌봄예약이 확정되었습니다");
+            notificationService.notifyUser(user.getUsername(), "파트너:돌봄예약이 확정되었습니다");
         } else {
             log.warn("Partner " + user.getUsername() + " is not connected. Notification not sent.");
         }
         if (notificationService.isUserConnected(consumer.getUsername())) {
-            notificationService.notifyUser(consumer.getUsername(), "돌봄예약이 확정되었습니다");
+            notificationService.notifyUser(consumer.getUsername(), "유저:돌봄예약이 확정되었습니다");
         }else {
             log.warn("consumer " + consumer.getUsername() + " is not connected. Notification not sent.");
         }
@@ -647,13 +647,13 @@ public class CareMatchingService {
         careMatchingRepository.delete(careMatching);
         //예약 거절한거 메세지 보내야함
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "돌봄예약을 거절하셨습니다");
+            notificationService.notifyUser(user.getUsername(), "파트너:돌봄예약을 거절하셨습니다");
         } else {
             log.warn("Partner " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity consumer = careMatching.getOwner();
         if (notificationService.isUserConnected(consumer.getUsername())) {
-            notificationService.notifyUser(consumer.getUsername(), "돌봄예약이 거절되었습니다");
+            notificationService.notifyUser(consumer.getUsername(), "유저:돌봄예약이 거절되었습니다");
         }else {
             log.warn("consumer " + consumer.getUsername() + " is not connected. Notification not sent.");
         }
@@ -715,13 +715,13 @@ public class CareMatchingService {
         }
         //예약 취소한거 메세지 보내야함
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "예약을 취소하셨습니다");
+            notificationService.notifyUser(user.getUsername(), "유저:예약을 취소하셨습니다");
         } else {
             log.warn("User " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity partner = carePost.getCaregiver();
         if (notificationService.isUserConnected(partner.getUsername())) {
-            notificationService.notifyUser(partner.getUsername(), "확정된 에약이 취소되었습니다");
+            notificationService.notifyUser(partner.getUsername(), "파트너:확정된 에약이 취소되었습니다");
         }else {
             log.warn("Partner " + partner.getUsername() + " is not connected. Notification not sent.");
         }
@@ -750,13 +750,13 @@ public class CareMatchingService {
         careMatchingRepository.save(careMatching);
         //돌봄 시작 알림
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "돌봄이 시작되었습니다");
+            notificationService.notifyUser(user.getUsername(), "파트너:돌봄이 시작되었습니다");
         } else {
             log.warn("User " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity consumer = careMatching.getOwner();
         if (notificationService.isUserConnected(consumer.getUsername())) {
-            notificationService.notifyUser(consumer.getUsername(), "돌봄이 시작되었습니다");
+            notificationService.notifyUser(consumer.getUsername(), "유저:돌봄이 시작되었습니다");
         }else {
             log.warn("consumer " + consumer.getUsername() + " is not connected. Notification not sent.");
         }
@@ -797,13 +797,13 @@ public class CareMatchingService {
 
         //돌봄 완료 알림
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "돌봄이 완료되었습니다");
+            notificationService.notifyUser(user.getUsername(), "유저:돌봄이 완료되었습니다");
         } else {
             log.warn("User " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity partner = carePost.getCaregiver();
         if (notificationService.isUserConnected(partner.getUsername())) {
-            notificationService.notifyUser(partner.getUsername(), "돌봄이 완료되었습니다");
+            notificationService.notifyUser(partner.getUsername(), "파트너:돌봄이 완료되었습니다");
         }else {
             log.warn("Partner " + partner.getUsername() + " is not connected. Notification not sent.");
         }
@@ -844,13 +844,13 @@ public class CareMatchingService {
 
         //돌봄 미완료 메세지 보내야함 양쪽
         if (notificationService.isUserConnected(user.getUsername())) {
-            notificationService.notifyUser(user.getUsername(), "문제발생으로 종료되었습니다");
+            notificationService.notifyUser(user.getUsername(), "유저:문제발생으로 종료되었습니다");
         } else {
             log.warn("User " + user.getUsername() + " is not connected. Notification not sent.");
         }
         UserEntity partner = carePost.getCaregiver();
         if (notificationService.isUserConnected(partner.getUsername())) {
-            notificationService.notifyUser(partner.getUsername(), "문제발생으로 종료되었습니다");
+            notificationService.notifyUser(partner.getUsername(), "파트너:문제발생으로 종료되었습니다");
         }else {
             log.warn("Partner " + partner.getUsername() + " is not connected. Notification not sent.");
         }

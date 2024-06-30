@@ -1,8 +1,8 @@
 package io.cloudtype.Demo.login;
 
-import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.mypage.user.UserEntity;
 import io.cloudtype.Demo.mypage.user.UserRepository;
+import io.cloudtype.Demo.jwt.JWTUtil;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 

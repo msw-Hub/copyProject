@@ -344,4 +344,18 @@ public class MyPageController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+    //로그아웃
+    @GetMapping("/logout")
+    public ResponseEntity<String> logout(@RequestHeader("Authorization") String accessToken,
+                                         @RequestHeader("X-Refresh-Token") String refreshToken
+    ) {
+        try {
+            log.info("accessToken: {}", accessToken);
+            log.info("refreshToken: {}", refreshToken);
+            myPageService.logout(accessToken, refreshToken);
+            return ResponseEntity.ok("로그아웃 성공");
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

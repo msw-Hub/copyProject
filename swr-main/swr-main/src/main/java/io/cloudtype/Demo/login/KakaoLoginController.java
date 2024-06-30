@@ -1,8 +1,8 @@
 package io.cloudtype.Demo.login;
 
-import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.mypage.user.UserEntity;
 import io.cloudtype.Demo.mypage.user.UserRepository;
+import io.cloudtype.Demo.jwt.JWTUtil;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;

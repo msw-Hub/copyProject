@@ -1,23 +1,20 @@
 package io.cloudtype.Demo.mypage;
 
-import io.cloudtype.Demo.jwt.JWTUtil;
 import io.cloudtype.Demo.login.JoinDetailsDTO;
 import io.cloudtype.Demo.login.JoinService;
 import io.cloudtype.Demo.mypage.pet.PetDTO;
 import io.cloudtype.Demo.mypage.pet.PetEntity;
 import io.cloudtype.Demo.mypage.pet.PetRepository;
-import io.cloudtype.Demo.mypage.user.PartnerEntity;
-import io.cloudtype.Demo.mypage.user.PartnerRepository;
-import io.cloudtype.Demo.mypage.user.UserEntity;
-import io.cloudtype.Demo.mypage.user.UserRepository;
+import io.cloudtype.Demo.mypage.user.*;
+import io.cloudtype.Demo.jwt.JWTUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.BodyInserters;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,10 +32,12 @@ public class MyPageService {
     private final JWTUtil jwtUtil;
     private final JoinService joinService;
     private final WebClient.Builder webClientBuilder;
+    private final BlacklistRepository blacklistRepository;
 
     public MyPageService(UserRepository userRepository, JWTUtil jwtUtil, JoinService joinService,
                          BCryptPasswordEncoder bCryptPasswordEncoder, PetRepository petRepository,
-                         PartnerRepository partnerRepository, WebClient.Builder webClientBuilder
+                         PartnerRepository partnerRepository, WebClient.Builder webClientBuilder,
+                            BlacklistRepository blacklistRepository
     ) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
@@ -47,6 +46,7 @@ public class MyPageService {
         this.petRepository = petRepository;
         this.partnerRepository = partnerRepository;
         this.webClientBuilder = webClientBuilder;
+        this.blacklistRepository = blacklistRepository;
     }
     public boolean checkPinNumber(String accessToken, int pinNumber) {
         accessToken = accessToken.split(" ")[1];
@@ -359,5 +359,21 @@ public class MyPageService {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다");
         }
         return user;
+    }
+    //블랙 리스트에 추가하고 나중에 비교함
+    @Transactional
+    public void logout(String accessToken, String refreshToken) {
+        UserEntity user = getUserEntity(accessToken);
+        user.setRefreshToken(null);
+        userRepository.save(user);
+        //먼저 있는 지를 찾아서 없으면 추가
+        accessToken = accessToken.split(" ")[1];
+        if (blacklistRepository.existsByAccessToken(accessToken) || blacklistRepository.existsByRefreshToken(refreshToken)) {
+            throw new IllegalStateException("이미 로그아웃된 사용자입니다");
+        }
+        BlacklistEntity blacklistEntity = new BlacklistEntity();
+        blacklistEntity.setAccessToken(accessToken);
+        blacklistEntity.setRefreshToken(refreshToken);
+        blacklistRepository.save(blacklistEntity);
     }
 }
